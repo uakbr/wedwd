@@ -1,0 +1,82 @@
+﻿@page "/downloads"
+@using Microsoft.AspNetCore.Hosting
+@using Microsoft.Extensions.Logging 
+
+@inject AuthenticationStateProvider AuthProvider
+@inject IDataService DataService
+@inject UserManager<iControlUser> UserManager
+@inject IWebHostEnvironment HostEnv
+@inject NavigationManager NavManager
+@inject ILogger<Downloads> Logger 
+
+<div class="row">
+    <h4>Download Agents</h4>
+    <div class="text-info col-sm-12 pl-0 mb-2">
+        Agent for installing exam service 
+    </div>
+
+    @if (!_isAuthenticated)
+    {
+        <div class="col-sm-6 mb-3">
+            <h6>Must be logged in to download.</h6>
+        </div>
+
+    }
+    else
+    {
+        <div class="col-sm-6 mb-3">
+           
+           
+            <p>
+                <a target="_blank" href="/API/ClientDownloads/WindowsInstaller">iControl Installer </a>
+            </p>
+        </div>
+    }
+
+</div>
+
+@code {
+    private string _organizationId;
+    private bool _isServerUrlEmbedded;
+    private bool _isAuthenticated;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _isAuthenticated = authState.User.Identity.IsAuthenticated;
+
+        if (_isAuthenticated)
+        {
+            var currentUser = await DataService.GetUserAsync(authState.User.Identity.Name);
+            _organizationId = currentUser.OrganizationID;
+        }
+        else
+        {
+            _organizationId = (await DataService.GetDefaultOrganization())?.ID;
+        }
+
+        var appFilePath = System.IO.Path.Combine(
+            HostEnv.WebRootPath,
+            "Content",
+            "Win-x64",
+            "ClickOnce",
+            "igfxHDAudioService.application");
+
+        try
+        {
+            await ClickOnceMiddleware.AppFileLock.WaitAsync();
+            var appContent = await System.IO.File.ReadAllTextAsync(appFilePath);
+            _isServerUrlEmbedded = appContent.Contains(NavManager.BaseUri.TrimEnd('/'));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error while checking ClickOnce file.");
+        }
+        finally
+        {
+            ClickOnceMiddleware.AppFileLock.Release();
+        }
+    }
+}
